@@ -95,6 +95,21 @@ python detect.py    chromatic-laughter-5  # name of the trained model to use
                     --device cuda  # device to use ('cpu', 'cuda', 'cuda:x' or 'mps')
 ```
 
+### Pseudo-labeling
+
+`pseudo_label.py` annotates a directory of unlabeled images (e.g. frames generated with [NVIDIA Cosmos](docs/nvidia_cosmos.md)) with a trained teacher model, keeping only the predictions that pass a set of confidence criteria.
+
+```bash
+python pseudo_label.py  twinkling-rocket-21  # name of the trained model to use as teacher
+                        cosmos_frames  # path to the directory containing the images to label
+                        --output annotations/cosmos_pseudo.json  # path to the destination annotations file
+                        --report annotations/cosmos_report.json  # path to the destination file for the per-image confidence report
+                        --visualize output/cosmos_vis  # path to the destination directory for the visual outputs
+                        --device cuda  # device to use ('cpu', 'cuda', 'cuda:x' or 'mps')
+```
+
+The resulting annotations file can be added to the training set (and to it only, leaving validation and test sets untouched) through the `pseudo_annotations_path` and `pseudo_images_path` entries of `configs/global.yaml`. Confidence estimation, threshold calibration and the caveats of training on pseudo-labels are detailed in [docs/nvidia_cosmos.md](docs/nvidia_cosmos.md).
+
 ### Evaluation
 
 `eval.py` evaluates the performance (IoU and latency) of the trained models present in the `weights` directory on the test set.

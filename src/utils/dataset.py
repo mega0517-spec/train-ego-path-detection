@@ -227,16 +227,27 @@ class PathsDataset(Dataset):
             target[row, rails_points[0] : rails_points[1] + 1] = 255
         return Image.fromarray(target)
 
-    def get_perspective_weight_limit(self, percentile, logger):
-        logger.info("\nCalculating perspective weight limit...")
-        weights = []
-        for i in range(len(self)):
-            _, traj, ylim = self[i]
-            rails = regression_to_rails(traj.numpy(), ylim.item())
-            left_rail, right_rail = rails
-            rail_width = right_rail[:, 0] - left_rail[:, 0]
-            weight = 1 / rail_width
-            weights += weight.tolist()
-        limit = np.percentile(sorted(weights), percentile)
-        logger.info(f"Perspective weight limit: {limit:.2f}")
-        return limit
+
+def get_perspective_weight_limit(dataset, percentile, logger):
+    """Calculates the perspective weight limit of a regression dataset.
+
+    Args:
+        dataset (torch.utils.data.Dataset): Regression dataset (possibly a concatenation of several).
+        percentile (float): Percentile of the weights distribution to use as limit.
+        logger (logging.Logger): Logger to print the progress with.
+
+    Returns:
+        float: Perspective weight limit.
+    """
+    logger.info("\nCalculating perspective weight limit...")
+    weights = []
+    for i in range(len(dataset)):
+        _, traj, ylim = dataset[i]
+        rails = regression_to_rails(traj.numpy(), ylim.item())
+        left_rail, right_rail = rails
+        rail_width = right_rail[:, 0] - left_rail[:, 0]
+        weight = 1 / rail_width
+        weights += weight.tolist()
+    limit = np.percentile(sorted(weights), percentile)
+    logger.info(f"Perspective weight limit: {limit:.2f}")
+    return limit
