@@ -103,6 +103,21 @@ python detect.py    chromatic-laughter-5  # name of the trained model to use
 python eval.py
 ``` 
 
+## Tests
+
+The test suite covers the pure logic of the codebase (target generation, post-processing, losses, auto-cropping, metrics) with synthetic data, so it needs neither the dataset nor trained weights, and runs on CPU in a few seconds.
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
+The tests that build neural networks are marked `slow` and can be skipped for a faster loop:
+
+```bash
+pytest -m "not slow"
+```
+
 ## Acknowledgement
 
 This research work contributes to the French collaborative project TASV (Autonomous Passenger Service Train), involving SNCF, Alstom Crespin, Thales, Bosch, and SpirOps. It was conducted in the framework of IRT Railenium, Valenciennes, France, and therefore was granted public funds within the scope of the French program “Investissements d’Avenir”.
