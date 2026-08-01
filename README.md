@@ -95,6 +95,22 @@ python detect.py    chromatic-laughter-5  # name of the trained model to use
                     --device cuda  # device to use ('cpu', 'cuda', 'cuda:x' or 'mps')
 ```
 
+### Synthetic data generation
+
+`cosmos_transfer.py` re-renders annotated frames into new weather and lighting conditions with [NVIDIA Cosmos](docs/nvidia_cosmos.md), keeping the track geometry (and therefore the existing annotations) intact, and drops the frames where the geometry did not survive.
+
+```bash
+python cosmos_transfer.py   --annotations rs19_egopath.json  # path to the annotations file of the source images
+                            --images rs19_val/jpgs/rs19_val  # path to the source images directory
+                            --output data/cosmos  # path to the destination directory
+                            --domains night,rain,fog  # comma-separated target domains ('all' for every known domain)
+                            --limit 200  # maximum number of source frames to use
+                            --backend nim  # how to run the generation ('none', 'command' or 'nim')
+                            --endpoint http://localhost:8000/v1/infer  # inference endpoint of the 'nim' backend
+```
+
+Generation is delegated to the Cosmos runtime of your choice; with the default `none` backend the script only writes the generation specs, and importing the results is done by rerunning the same command. See [docs/nvidia_cosmos.md](docs/nvidia_cosmos.md) for the model access requirements, the choice of control modalities and how the geometry is verified.
+
 ### Pseudo-labeling
 
 `pseudo_label.py` annotates a directory of unlabeled images (e.g. frames generated with [NVIDIA Cosmos](docs/nvidia_cosmos.md)) with a trained teacher model, keeping only the predictions that pass a set of confidence criteria.

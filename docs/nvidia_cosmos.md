@@ -78,7 +78,22 @@ Workflow:
 
 NVIDIA's own guidance is that high-fidelity, structurally consistent results need **multi-control tuning** (a combination such as `edge` + `depth`) rather than any single modality.
 
-Because `src/utils/dataset.py` (`PathsDataset`) simply reads a JSON dict keyed by image filename and loads images from a flat directory, no code changes are needed: place the generated images alongside the originals (or point `images_path` at a merged directory) and extend the annotations file with entries for the new filenames.
+`cosmos_transfer.py` implements this workflow — see [Generating transferred frames](#generating-transferred-frames) below.
+
+### Verifying that the geometry survived
+
+The whole approach rests on an assumption that must be checked rather than trusted: that the generation did not move the rails. Two checks are possible, and **which one gates acceptance matters a great deal**.
+
+The obvious check — run a trained detector on the generated frame and compare its prediction to the source annotation — is *confounded*. A low IoU has two very different causes:
+
+1. the generation distorted the geometry, so the annotation is now wrong and the frame must be dropped, or
+2. the geometry is intact but the new domain is genuinely hard to detect in, so the annotation is still perfectly valid — and this is exactly the coverage the dataset is being extended for.
+
+Gating on detector IoU therefore discards the most valuable samples first. `cosmos_transfer.py` instead gates on a **model-free structural check** (`edge_retention`): it measures how much image gradient concentrates along the annotated rail polylines, relative to the mean gradient of the frame, and compares that concentration between the source and the generated frame. Normalizing by the frame's own gradient makes it insensitive to the global contrast change that a transfer applies on purpose — a foggy frame is flatter everywhere — while still detecting rails that moved away from where the annotation says they are.
+
+The detector IoU is still reported when `--verify-with` is passed, because the *drop* is informative: a large drop with an intact geometry tells you the domain is hard, which is a useful signal about what the dataset is gaining. It is simply not used to reject by default (`--min-teacher-iou` is disabled unless set).
+
+Because `src/utils/dataset.py` (`PathsDataset`) simply reads a JSON dict keyed by image filename and loads images from a flat directory, no code changes are needed: the script writes the generated images to one directory and their annotations to a JSON file, ready to be pointed at by `pseudo_images_path` and `pseudo_annotations_path`.
 
 ### 2. Novel scene generation + pseudo-labeling (secondary approach)
 
@@ -93,6 +108,47 @@ Generated data should be filtered before training:
 - `pseudo_label.py` rejects predictions the teacher is not confident about (see the criteria below).
 - Use the reasoning capability of Cosmos 3 (or any VLM) to reject frames with implausible physics or missing/hallucinated tracks, before pseudo-labeling.
 - For Transfer outputs, the source annotation is the reference: run the teacher on the generated frame and compare its prediction to the *original* annotation. A large IoU drop means the generation distorted the geometry, so the frame should be dropped even though its annotation is nominally still valid. `pseudo_label.py --calibrate` performs exactly this comparison.
+
+## Generating transferred frames
+
+`cosmos_transfer.py` drives the whole annotation-preserving workflow: it builds the generation jobs, writes one spec per job, optionally runs the generation, then verifies the results and emits the annotations for the frames whose geometry survived.
+
+Because the exact spec schema and invocation differ between Cosmos versions and runtimes, generation itself is delegated. Three backends are available:
+
+```bash
+# 1. specs only (default) — generate them with whatever runtime you have, then rerun to import
+python cosmos_transfer.py  --annotations /path/to/rs19_egopath.json \
+                           --images /path/to/rs19_val/jpgs/rs19_val \
+                           --output data/cosmos  --domains night,rain,fog  --limit 200
+
+# 2. an external command, run once per job
+python cosmos_transfer.py  ...  --backend command \
+                           --command "cosmos-transfer --spec {spec_path}"
+
+# 3. a NIM or API catalog endpoint (bearer token read from $NVIDIA_API_KEY)
+python cosmos_transfer.py  ...  --backend nim  --endpoint http://localhost:8000/v1/infer
+```
+
+The default run writes `specs/`, `jobs.json` and nothing else; rerunning the same command after generating picks up whatever appeared in `images/` and verifies it. This makes the script usable with any runtime, including one on a different machine from the dataset.
+
+The output directory then contains:
+
+| Path | Contents |
+| ---- | -------- |
+| `images/` | the generated frames, named `<source>__<domain>.<ext>` |
+| `cosmos_egopath.json` | annotations of the accepted frames, keyed by generated filename |
+| `report.json` | per-frame metrics, acceptance status and rejection reasons |
+| `specs/`, `jobs.json` | the generation specs and the job manifest |
+
+Options worth knowing:
+
+- `--control-weights edge=0.5,depth=0.3` — the multi-control combination discussed above. This is written into the spec; whether the runtime honors those key names depends on its schema.
+- `--spec-template my_spec.json` — render your runtime's own schema instead of the built-in one. Any `{prompt}`, `{negative_prompt}`, `{source_path}`, `{output_path}` or `{control}` placeholder is substituted, at any depth; a string that is nothing but `{control}` becomes the weights mapping itself rather than its text form.
+- `--prompts my_prompts.json` — override or extend the built-in domain prompts. Every built-in prompt ends with an explicit clause stating that the track layout and camera viewpoint must not change.
+- `--min-edge-retention 0.7` — the acceptance threshold. Inspect `report.json` and the `--visualize` overlays on a first small batch before trusting it, since the right value depends on how much texture your source frames carry.
+- `--video-frame 0` — Cosmos generates video; if a job returns a clip, this selects which frame to keep. The default (first frame) is the one closest to the conditioning image, and therefore the one whose geometry is most likely intact.
+
+Generated frames of a different resolution than the source are handled: the annotation is scaled to the generated frame, and the verification resizes back to a common grid before measuring.
 
 ## Pseudo-labeling
 
