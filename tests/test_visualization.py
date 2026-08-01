@@ -82,11 +82,13 @@ class TestRailsOverlay:
     @pytest.mark.parametrize(
         "egopath", [[[], RAILS[1]], [RAILS[0], []], [[], []]], ids=["left", "right", "both"]
     )
-    def test_an_empty_rail_also_skips_the_crop_rectangle(self, egopath):
-        # documents current behaviour: the empty-path branch returns early, so
-        # `detect.py --show-crop` shows no crop box on frames without a detection
+    def test_an_empty_rail_still_draws_the_crop_rectangle(self, egopath):
+        # the crop box must not flicker on the frames where nothing was detected
         result = draw_egopath(canvas(), egopath, crop_coords=(3, 3, 10, 10))
-        assert not np.array(result).any()
+        array = np.array(result)
+        assert tuple(array[3, 3]) == RED
+        assert tuple(array[10, 10]) == RED
+        assert tuple(array[INSIDE]) == (0, 0, 0)  # but still no overlay
 
 
 class TestSegmentationOverlay:
@@ -110,12 +112,20 @@ class TestSegmentationOverlay:
         from_mask = draw_egopath(canvas(60), region_mask())
         assert pixel(from_rails, INSIDE) == pixel(from_mask, INSIDE)
 
-    def test_a_numpy_mask_is_silently_ignored(self):
-        # documents a docstring mismatch: the signature advertises numpy.ndarray
-        # but only list (rails) and PIL.Image (mask) reach an overlay branch
-        img = canvas(60)
-        array = np.array(region_mask())
-        np.testing.assert_array_equal(np.array(draw_egopath(img, array)), np.array(img))
+    def test_a_numpy_mask_is_accepted_like_a_pil_one(self):
+        # the docstring advertises numpy.ndarray, so it must reach an overlay
+        # branch instead of silently producing an untouched copy
+        from_pil = draw_egopath(canvas(60), region_mask())
+        from_numpy = draw_egopath(canvas(60), np.array(region_mask()))
+        np.testing.assert_array_equal(np.array(from_numpy), np.array(from_pil))
+        assert pixel(from_numpy, INSIDE) != (60, 60, 60)
+
+    def test_a_numpy_mask_honours_opacity_and_color(self):
+        result = draw_egopath(
+            canvas(), np.array(region_mask()), opacity=1.0, color=(200, 100, 50)
+        )
+        assert pixel(result, INSIDE) == (200, 100, 50)
+        assert pixel(result, OUTSIDE) == (0, 0, 0)
 
 
 class TestCropRectangle:
