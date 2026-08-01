@@ -84,7 +84,7 @@ def main(args):
         device=args.device,
     )
 
-    extension = os.path.splitext(args.input)[1]
+    extension = os.path.splitext(args.input)[1].lower()
     outname = f"{os.path.splitext(os.path.basename(args.input))[0]}_out{extension}"
     if args.output is not None:
         os.makedirs(args.output, exist_ok=True)
@@ -141,7 +141,11 @@ def main(args):
         logger.info("")
 
     else:
-        raise NotImplementedError
+        raise NotImplementedError(
+            f"Unsupported file format '{extension}'."
+            " Supported formats are '.jpg', '.jpeg' and '.png' for images,"
+            " and '.mp4' and '.avi' for videos."
+        )
 
     logger.info(f"\nInference complete. Output saved to {output_path}")
 
