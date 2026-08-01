@@ -78,7 +78,7 @@ def rails_to_mask(rails, mask_shape):
     """
     left_rail, right_rail = rails
     if not left_rail or not right_rail:
-        return np.zeros(mask_shape[::-1], dtype=np.uint8)
+        return Image.new("L", mask_shape, 0)
     mask = Image.new("L", mask_shape, 0)
     draw = ImageDraw.Draw(mask)
     points = left_rail + right_rail[::-1]

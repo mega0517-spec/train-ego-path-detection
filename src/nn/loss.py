@@ -58,10 +58,11 @@ class BinaryDiceLoss(nn.Module):
         prediction = torch.sigmoid(prediction)
         prediction = prediction.flatten(start_dim=1)  # (B, H * W)
         target = target.flatten(start_dim=1)
-        zero_target_mask = target.sum(dim=1) == 0  # (B,)
-        if zero_target_mask.any():
-            prediction[zero_target_mask] = 1 - prediction[zero_target_mask]
-            target[zero_target_mask] = 1 - target[zero_target_mask]
+        zero_target_mask = (target.sum(dim=1) == 0).unsqueeze(dim=1)  # (B, 1)
+        # if target is empty, we compute the score on the negated masks (out of
+        # place, as flatten() returns a view over the caller's ground truth)
+        prediction = torch.where(zero_target_mask, 1 - prediction, prediction)
+        target = torch.where(zero_target_mask, 1 - target, target)
         intersection = (prediction * target).sum(dim=1)  # (B,)
         cardinality = (prediction + target).sum(dim=1)
         scores = 2 * intersection / cardinality
