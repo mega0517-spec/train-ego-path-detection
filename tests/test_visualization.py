@@ -43,6 +43,25 @@ class TestGeneral:
         assert result.size == img.size
         assert result.mode == img.mode
 
+    @pytest.mark.parametrize(
+        "egopath",
+        [None, "egopath", 42, (RAILS[0], RAILS[1]), {"left": RAILS[0]}],
+        ids=["none", "str", "int", "tuple-of-rails", "dict"],
+    )
+    def test_rejects_an_unsupported_egopath_type(self, egopath):
+        # anything that reaches no overlay branch must fail loudly rather than
+        # hand back an untouched copy of the image
+        with pytest.raises(TypeError, match="egopath should be"):
+            draw_egopath(canvas(60), egopath)
+
+    def test_the_error_names_the_offending_type(self):
+        with pytest.raises(TypeError, match="got tuple"):
+            draw_egopath(canvas(60), (RAILS[0], RAILS[1]))
+
+    def test_rejects_before_drawing_the_crop_rectangle(self):
+        with pytest.raises(TypeError):
+            draw_egopath(canvas(60), None, crop_coords=(3, 3, 10, 10))
+
 
 class TestRailsOverlay:
     def test_fills_the_polygon_between_the_rails(self):

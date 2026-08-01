@@ -14,6 +14,9 @@ def draw_egopath(img, egopath, opacity=0.5, color=(0, 189, 80), crop_coords=None
 
     Returns:
         PIL.Image.Image: Image with the ego-path overlay.
+
+    Raises:
+        TypeError: If egopath is neither a list of rail points nor a mask.
     """
     vis = img.copy()
     if isinstance(egopath, list):  # classification/regression
@@ -29,6 +32,11 @@ def draw_egopath(img, egopath, opacity=0.5, color=(0, 189, 80), crop_coords=None
         colored_mask = Image.new("RGBA", mask.size, color + (0,))
         colored_mask.putalpha(mask)
         vis.paste(colored_mask, (0, 0), colored_mask)
+    else:
+        raise TypeError(
+            "egopath should be a list of rail points (classification/regression)"
+            f" or a mask (segmentation), got {type(egopath).__name__}"
+        )
     if crop_coords is not None:
         draw = ImageDraw.Draw(vis)
         draw.rectangle(crop_coords, outline=(255, 0, 0), width=1)
