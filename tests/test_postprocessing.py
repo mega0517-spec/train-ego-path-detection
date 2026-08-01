@@ -123,13 +123,19 @@ class TestRailsToMask:
     @pytest.mark.parametrize(
         "rails", [[[], [[6, 8], [6, 2]]], [[[2, 8], [2, 2]], []], [[], []]]
     )
-    def test_empty_rail_returns_a_numpy_array_not_an_image(self, rails):
-        # documents an inconsistency: the empty branch returns numpy, the normal
-        # branch returns PIL, and scale_mask() would fail on the numpy variant
+    def test_empty_rail_returns_an_empty_image(self, rails):
+        # both branches must return a PIL image, otherwise scale_mask() breaks on
+        # the frames where nothing was detected
         mask = rails_to_mask(rails, mask_shape=(10, 20))
-        assert isinstance(mask, np.ndarray)
-        assert mask.shape == (20, 10)
-        assert not mask.any()
+        assert isinstance(mask, Image.Image)
+        assert mask.size == (10, 20)
+        assert not np.array(mask).any()
+
+    def test_an_empty_mask_can_be_rescaled(self):
+        mask = rails_to_mask([[], []], mask_shape=(10, 20))
+        scaled = scale_mask(mask, (5, 5, 24, 34), img_shape=(40, 40))
+        assert scaled.size == (40, 40)
+        assert not np.array(scaled).any()
 
 
 class TestScaleMask:

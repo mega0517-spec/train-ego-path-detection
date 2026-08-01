@@ -214,13 +214,22 @@ class TestBinaryDiceLoss:
         BinaryDiceLoss()(prediction, target.clone())
         assert (prediction == 0).all()
 
-    def test_mutates_the_target_in_place_on_empty_samples(self):
-        # documents a real bug: the negation trick writes through the view returned
-        # by flatten(), so the caller's ground truth is silently flipped whenever a
-        # sample has an empty target
+    def test_does_not_modify_the_target_on_empty_samples(self):
+        # the negation trick must not write through the view returned by flatten(),
+        # or the caller's ground truth would be silently flipped
         target = self.target([[0, 0, 0, 0], [0, 0, 0, 0]])
         BinaryDiceLoss()(torch.zeros_like(target), target)
-        assert (target == 1).all()  # should still be all zeros
+        assert (target == 0).all()
+
+    def test_only_empty_samples_are_negated_within_a_batch(self):
+        empty = self.target([[0, 0, 0, 0], [0, 0, 0, 0]])
+        filled = self.target([[1, 1, 0, 0], [1, 1, 0, 0]])
+        target = torch.cat([empty, filled])
+        # a confident empty prediction is perfect on the empty sample and perfectly
+        # wrong on the filled one, so the batch mean sits exactly halfway
+        prediction = torch.full_like(target, -20.0)
+        assert BinaryDiceLoss()(prediction, target).item() == pytest.approx(0.5, abs=1e-6)
+        torch.testing.assert_close(target, torch.cat([empty, filled]))
 
     def test_non_empty_targets_are_left_alone(self):
         target = self.target([[1, 1, 0, 0], [1, 1, 0, 0]])

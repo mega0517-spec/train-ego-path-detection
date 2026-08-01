@@ -276,14 +276,17 @@ class TestGetItem:
         assert not torch.allclose(plain_img, aug_img)
         torch.testing.assert_close(plain_traj, aug_traj)  # targets are unaffected
 
-    def test_non_square_input_shape_is_transposed(self, make_dataset):
-        # documents a latent bug: input_shape is (C, H, W) but the resize is fed
-        # (W, H), which is only harmless because the shipped configs are square
+    @pytest.mark.parametrize("method", ["regression", "classification", "segmentation"])
+    def test_non_square_input_shape_is_honoured(self, make_dataset, method):
+        # input_shape is (C, H, W): the tensor must come out with that exact shape,
+        # whichever resize convention the underlying call expects
         dataset = make_dataset(
-            method="regression", config={"input_shape": [3, 24, 48]}, to_tensor=True
+            method=method, config={"input_shape": [3, 24, 48]}, to_tensor=True
         )
-        img, _, _ = dataset[0]
-        assert img.shape == (3, 48, 24)  # should be (3, 24, 48)
+        img, *targets = dataset[0]
+        assert img.shape == (3, 24, 48)
+        if method == "segmentation":
+            assert targets[0].shape == (1, 24, 48)
 
 
 class TestGetPerspectiveWeightLimit:

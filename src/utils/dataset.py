@@ -56,7 +56,7 @@ class PathsDataset(Dataset):
             transforms.Compose(
                 [
                     to_scaled_tensor,
-                    transforms.Resize(self.config["input_shape"][1:][::-1]),
+                    transforms.Resize(self.config["input_shape"][1:]),  # (H, W)
                 ]
             )
             if to_tensor
@@ -92,7 +92,7 @@ class PathsDataset(Dataset):
             segmentation = self.generate_target_segmentation(rails_mask)
             if self.to_tensor:
                 segmentation = segmentation.resize(
-                    self.config["input_shape"][1:][::-1], Image.NEAREST
+                    self.config["input_shape"][1:][::-1], Image.NEAREST  # (W, H)
                 )
                 segmentation = to_scaled_tensor(segmentation)
             return img, segmentation

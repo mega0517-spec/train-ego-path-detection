@@ -56,36 +56,29 @@ class TestUpdate:
         cropper.update(IMG_SHAPE, rails_prediction(left=80, right=120, top=40))
         # the running average is seeded with the full frame, so the first crop
         # never restricts the image whatever the prediction is
-        assert cropper() == (0, 0, IMG_SHAPE[0], IMG_SHAPE[1])
+        assert cropper() == (0, 0, IMG_SHAPE[0] - 1, IMG_SHAPE[1] - 1)
         assert cropper.n == 1
 
     def test_converges_towards_the_predicted_region(self, config):
         cropper = Autocropper(config)
-        for _ in range(200):
+        for _ in range(300):
             cropper.update(IMG_SHAPE, rails_prediction(left=80, right=120, top=40))
         xleft, ytop, xright, _ = cropper()
-        # the crop settles around the rails plus a ~10% margin, and never eats into
-        # the predicted region itself
-        assert 0 < xleft < 80
-        assert 120 < xright < IMG_SHAPE[0]
-        assert 0 < ytop < 40
-        # the right edge (which decreases) reaches its target: 120 + 10% of the width
-        assert xright == pytest.approx(124, abs=1)
+        # the crop settles on the rails plus a 10% margin: 10% of the rails width
+        # on the sides, 10% of the height below the rails top above
+        assert xleft == 80 - 0.1 * 40
+        assert xright == 120 + 0.1 * 40
+        assert ytop == 40 - 0.1 * 60
 
-    def test_increasing_edges_stall_short_of_their_target(self, config):
-        # documents current behaviour: crop_coords is truncated with int() at every
-        # step, so an edge that has to grow stops moving once the running-average
-        # increment falls below one pixel, i.e. roughly 1/coeff pixels too early
+    def test_the_coefficient_only_changes_the_speed_not_the_destination(self, config):
+        # the running average is kept in float, so an edge that has to grow reaches
+        # its target instead of stalling once its increment drops below a pixel
         loose = Autocropper(config, coeff=0.1)
         tight = Autocropper(config, coeff=0.5)
-        for _ in range(200):
+        for _ in range(300):
             loose.update(IMG_SHAPE, rails_prediction(left=80, right=120, top=40))
             tight.update(IMG_SHAPE, rails_prediction(left=80, right=120, top=40))
-        # both have fully converged in the sense that they no longer move...
-        assert loose() == (66, 24, 124, 100)
-        assert tight() == (74, 32, 124, 100)
-        # ...yet the smaller coefficient stops around 1/coeff pixels further out
-        assert tight()[0] - loose()[0] == pytest.approx(8, abs=2)
+        assert loose() == tight() == (76, 34, 124, IMG_SHAPE[1] - 1)
 
     def test_crop_shrinks_monotonically_for_a_stable_prediction(self, config):
         cropper = Autocropper(config)
@@ -108,16 +101,17 @@ class TestUpdate:
             top = int(rng.integers(0, 99))
             cropper.update(IMG_SHAPE, rails_prediction(left, right, top))
             xleft, ytop, xright, ybottom = cropper()
-            assert 0 <= xleft < xright <= IMG_SHAPE[0]
-            assert 0 <= ytop < ybottom
+            # coordinates are inclusive, so the last valid index is size - 1
+            assert 0 <= xleft < xright <= IMG_SHAPE[0] - 1
+            assert 0 <= ytop < ybottom <= IMG_SHAPE[1] - 1
 
-    def test_bottom_coordinate_is_never_updated(self, config):
-        # documents current behaviour: only the 3 first coordinates are averaged,
-        # so ybottom stays at the image height (not height - 1) forever
+    def test_bottom_coordinate_is_the_inclusive_image_bottom(self, config):
+        # the ego-path always reaches the bottom of the frame, so ybottom is not
+        # tracked -- but it must still be a valid inclusive coordinate
         cropper = Autocropper(config)
         for _ in range(20):
             cropper.update(IMG_SHAPE, rails_prediction(left=80, right=120, top=40))
-        assert cropper()[3] == IMG_SHAPE[1]
+        assert cropper()[3] == IMG_SHAPE[1] - 1
 
     def test_widening_prediction_reopens_the_crop(self, config):
         cropper = Autocropper(config)

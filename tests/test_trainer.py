@@ -160,11 +160,11 @@ class TestTrain:
         self.run(module, tmp_path, epochs=3, scheduler=scheduler)
         assert len(steps) == 3
 
-    @pytest.mark.parametrize("epochs, expected_saves", [(1, 0), (4, 0), (10, 1), (20, 2)])
+    @pytest.mark.parametrize("epochs, expected_saves", [(1, 1), (4, 1), (10, 1), (20, 2)])
     def test_checkpointing_window(self, trainer, tmp_path, monkeypatch, epochs, expected_saves):
-        # documents current behaviour: the guard is `epoch >= epochs * 0.9` on a
-        # zero-indexed epoch, so the eligible window is one epoch shorter than the
-        # intended last 10% -- and short runs finish with no weights on disk at all
+        # checkpointing covers the last 10% of the run (the loss keeps improving
+        # here, so every eligible epoch saves) and the final epoch is always in,
+        # so even a one-epoch run leaves weights behind
         module, _ = trainer
         saves = []
         original_save = torch.save
@@ -173,4 +173,23 @@ class TestTrain:
         )
         self.run(module, tmp_path, epochs=epochs)
         assert len(saves) == expected_saves
-        assert os.path.exists(tmp_path / "best.pt") is bool(expected_saves)
+        assert os.path.exists(tmp_path / "best.pt")
+
+    @pytest.mark.parametrize("epochs", [200, 300, 400])
+    def test_long_runs_still_checkpoint_over_exactly_the_last_tenth(
+        self, trainer, tmp_path, monkeypatch, epochs
+    ):
+        # the shipped configs must keep their eligible window untouched: with a
+        # strictly decreasing validation loss every eligible epoch saves, so the
+        # number of saves is the size of the window
+        module, _ = trainer
+        losses = iter(range(epochs, 0, -1))
+        monkeypatch.setattr(module, "train_epoch", lambda *a, **k: 0.0)
+        monkeypatch.setattr(module, "val_epoch", lambda *a, **k: float(next(losses)))
+        saves = []
+        original_save = torch.save
+        monkeypatch.setattr(
+            module.torch, "save", lambda *a, **k: (saves.append(a[1]), original_save(*a, **k))[1]
+        )
+        self.run(module, tmp_path, epochs=epochs)
+        assert len(saves) == epochs // 10

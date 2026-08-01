@@ -196,6 +196,18 @@ class TestDetectWithAutocrop:
         assert crop is not None
         assert 0 < crop[0] < crop[2] <= IMG_SIZE[0]
 
+    def test_never_reads_past_the_edges_of_the_image(self, model_dir, image, monkeypatch):
+        path, _ = model_dir("regression")
+        detector = Detector(path, "auto", "pytorch", "cpu")
+        seen_sizes = stub_inference(detector, monkeypatch, regression_prediction(10.0))
+        for _ in range(30):
+            detector.detect(image)
+        # detect() crops with (xright + 1, ybottom + 1), and PIL pads with black
+        # past the image, so any oversized crop means the coordinates were not
+        # the inclusive ones the rest of the pipeline assumes
+        assert seen_sizes
+        assert all(w <= IMG_SIZE[0] and h <= IMG_SIZE[1] for w, h in seen_sizes)
+
     def test_detection_stays_inside_the_original_frame(self, model_dir, image, monkeypatch):
         path, _ = model_dir("regression")
         detector = Detector(path, "auto", "pytorch", "cpu")
@@ -208,8 +220,10 @@ class TestDetectWithAutocrop:
 
 
 class TestInferModelPytorch:
-    def test_resizes_the_input_to_the_configured_shape(self, model_dir, image):
-        path, config = model_dir("regression")
+    @pytest.mark.parametrize("input_shape", [[3, 64, 64], [3, 48, 64]])
+    def test_resizes_the_input_to_the_configured_shape(self, model_dir, image, input_shape):
+        # input_shape is (C, H, W) and must be honoured as such, not transposed
+        path, config = model_dir("regression", input_shape=input_shape)
         detector = Detector(path, None, "pytorch", "cpu")
         captured = {}
 

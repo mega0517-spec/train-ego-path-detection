@@ -81,7 +81,9 @@ def train(
             val_loss /= val_iterations
         if scheduler is not None:
             scheduler.step()
-        if epoch >= epochs * 0.9 and val_loss < best_val_loss:
+        # checkpoint over the last 10% of the run, the final epoch always included
+        # so that short runs do not silently finish without any weights on disk
+        if epoch + 1 > epochs * 0.9 and val_loss < best_val_loss:
             best_val_loss = val_loss
             torch.save(model.state_dict(), os.path.join(save_path, "best.pt"))
         logger.info(

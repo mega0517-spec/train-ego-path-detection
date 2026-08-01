@@ -139,7 +139,7 @@ class Detector:
 
     def infer_model_pytorch(self, img):
         tensor = to_scaled_tensor(img).unsqueeze(0).to(self.device)
-        tensor = transforms.Resize(self.config["input_shape"][1:][::-1])(tensor)
+        tensor = transforms.Resize(self.config["input_shape"][1:])(tensor)  # (H, W)
         with torch.inference_mode():
             pred = self.model(tensor)
         return pred.cpu().numpy()
@@ -148,7 +148,7 @@ class Detector:
         tensor = transforms.Compose(
             [
                 to_scaled_tensor,
-                transforms.Resize(self.config["input_shape"][1:][::-1]),
+                transforms.Resize(self.config["input_shape"][1:]),  # (H, W)
             ]
         )(img).contiguous()
         tensor = tensor.numpy()  # convert to numpy
