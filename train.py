@@ -17,7 +17,7 @@ from src.nn.loss import (
 )
 from src.nn.model import ClassificationNet, RegressionNet, SegmentationNet
 from src.utils.common import set_seeds, set_worker_seeds, simple_logger, split_dataset
-from src.utils.dataset import PathsDataset
+from src.utils.dataset import PathsDataset, get_perspective_weight_limit
 from src.utils.evaluate import IoUEvaluator
 from src.utils.trainer import train
 
@@ -84,6 +84,27 @@ def main(args):
         img_aug=True,
         to_tensor=True,
     )
+    if config.get("pseudo_annotations_path") is not None:
+        # pseudo-labeled images (e.g. synthetic ones, see pseudo_label.py) are added to
+        # the training set only, so that validation and test sets remain composed of
+        # real annotated images and stay comparable to the reference results
+        with open(config["pseudo_annotations_path"]) as json_file:
+            pseudo_indices = list(range(len(json.load(json_file).keys())))
+        pseudo_dataset = PathsDataset(
+            imgs_path=config.get("pseudo_images_path") or config["images_path"],
+            annotations_path=config["pseudo_annotations_path"],
+            indices=pseudo_indices,
+            config=config,
+            method=method,
+            img_aug=True,
+            to_tensor=True,
+        )
+        logger.info(
+            f"\nAdding {len(pseudo_dataset)} pseudo-labeled images"
+            + f" to the {len(train_dataset)} annotated training images..."
+        )
+        train_dataset = torch.utils.data.ConcatDataset([train_dataset, pseudo_dataset])
+
     val_dataset = (
         PathsDataset(
             imgs_path=config["images_path"],
@@ -164,7 +185,8 @@ def main(args):
     if method == "regression":
         criterion = TrainEgoPathRegressionLoss(
             ylimit_loss_weight=config["ylimit_loss_weight"],
-            perspective_weight_limit=train_dataset.get_perspective_weight_limit(
+            perspective_weight_limit=get_perspective_weight_limit(
+                dataset=train_dataset,
                 percentile=config["perspective_weight_limit_percentile"],
                 logger=logger,
             )
